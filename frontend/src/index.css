@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    background-color: #080B14;
+    color: #E2E8F0;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0D1117;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #2D3748;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #4A5568;
+  }
+}
+
+@layer components {
+  .glass {
+    background: rgba(13, 17, 23, 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(30, 37, 53, 0.8);
+  }
+
+  .glow-border {
+    border: 1px solid rgba(110, 231, 183, 0.3);
+    box-shadow: 0 0 20px rgba(110, 231, 183, 0.1);
+  }
+
+  .btn-primary {
+    @apply bg-accent text-void font-semibold px-5 py-2.5 rounded-lg hover:bg-accent/90 transition-all duration-200 text-sm;
+  }
+
+  .btn-ghost {
+    @apply text-text-secondary hover:text-text-primary hover:bg-panel px-4 py-2 rounded-lg transition-all duration-200 text-sm;
+  }
+
+  .input-field {
+    @apply w-full bg-panel border border-border rounded-lg px-4 py-3 text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-all duration-200;
+  }
+
+  .file-tree-item {
+    @apply flex items-center gap-2 px-3 py-1.5 rounded-md text-sm cursor-pointer text-text-secondary hover:text-text-primary hover:bg-panel/60 transition-all duration-150;
+  }
+
+  .file-tree-item.active {
+    @apply bg-accent/10 text-accent border-l-2 border-accent;
+  }
+}
+
+/* Monaco editor dark theme adjustments */
+.monaco-editor .margin {
+  background-color: #0D1117 !important;
+}
+
+/* Chat message prose styles */
+.prose-chat pre {
+  background: #161B27;
+  border: 1px solid #1E2535;
+  border-radius: 8px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+}
+
+.prose-chat code {
+  background: #161B27;
+  border: 1px solid #1E2535;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82em;
+  color: #6EE7B7;
+}
+
+.prose-chat pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #CBD5E1;
+}
+
+.prose-chat p { margin-bottom: 0.6rem; }
+.prose-chat ul, .prose-chat ol { margin-left: 1.2rem; margin-bottom: 0.6rem; }
+.prose-chat li { margin-bottom: 0.2rem; }
+.prose-chat strong { color: #E2E8F0; font-weight: 600; }
