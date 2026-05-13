@@ -4,8 +4,8 @@ import { useAuthStore } from '../context/authStore.js';
 import api from '../utils/api.js';
 import toast from 'react-hot-toast';
 import {
-  Zap, LogOut, Plus, Folder, FolderOpen, Trash2, ChevronRight,
-  Code2, Globe, Terminal, Clock, X
+  Zap, LogOut, Plus, Trash2, Edit, ChevronRight,
+  Code2, Globe, Terminal, Clock, X, Check
 } from 'lucide-react';
 
 const WORKSPACE_TYPES = [
@@ -117,7 +117,66 @@ function CreateProjectModal({ type, onClose, onCreated }) {
   );
 }
 
-function ProjectCard({ project, onOpen, onDelete }) {
+function RenameProjectModal({ project, onClose, onSave, saving, error }) {
+  const [name, setName] = useState(project.name);
+  const [debouncedName, setDebouncedName] = useState(project.name);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedName(name), 180);
+    return () => clearTimeout(timer);
+  }, [name]);
+
+  const trimmedName = name.trim();
+  const canSave = trimmedName && debouncedName.trim() !== project.name;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!trimmedName || trimmedName === project.name) return;
+    await onSave(project, trimmedName);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-void/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-surface border border-border rounded-2xl p-5 w-full max-w-sm shadow-panel animate-slide-up" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="font-display text-base font-semibold text-text-primary">Rename project</h2>
+            <p className="text-xs text-text-muted">Update the workspace title.</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary hover:bg-panel transition-all">
+            <X size={16} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input
+            autoFocus
+            className={`input-field transition-colors ${error ? 'border-red-400/50 focus:border-red-400' : ''}`}
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onFocus={e => e.target.select()}
+            maxLength={100}
+          />
+          <div className="min-h-[18px] text-xs">
+            {error ? <span className="text-red-400">{error}</span> : <span className="text-text-muted">{trimmedName.length}/100</span>}
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose} className="btn-ghost flex-1 border border-border">Cancel</button>
+            <button
+              type="submit"
+              disabled={!canSave || saving}
+              className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? <div className="w-4 h-4 rounded-full border-2 border-void border-t-transparent animate-spin" /> : <><Check size={14} /> Save</>}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ProjectCard({ project, onOpen, onDelete, onEdit }) {
   const typeMap = { javascript: { icon: Code2, color: 'text-amber-accent' }, python: { icon: Terminal, color: 'text-blue-accent' }, website: { icon: Globe, color: 'text-accent' } };
   const t = typeMap[project.type] || typeMap.javascript;
 
@@ -135,6 +194,16 @@ function ProjectCard({ project, onOpen, onDelete }) {
         <span className="text-xs text-text-muted hidden group-hover:flex items-center gap-1">
           <Clock size={11} /> {new Date(project.updatedAt).toLocaleDateString()}
         </span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit(project);
+          }}
+          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md text-text-muted hover:text-blue-400 hover:bg-blue-400/10 transition-all"
+          title="Rename project"
+        >
+          <Edit size={13} />
+        </button>
         <button
           onClick={e => { e.stopPropagation(); onDelete(project); }}
           className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md text-text-muted hover:text-red-400 hover:bg-red-400/10 transition-all"
@@ -154,7 +223,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [activeWorkspace, setActiveWorkspace] = useState('javascript');
   const [createModal, setCreateModal] = useState(null);
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameError, setRenameError] = useState('');
 
   useEffect(() => {
     fetchProjects();
@@ -175,11 +246,40 @@ export default function DashboardPage() {
     if (!window.confirm(`Delete "${project.name}"? This cannot be undone.`)) return;
     try {
       await api.delete(`/projects/${project._id}`);
-      setProjects(p => p.filter(x => x._id !== project.id));
+      setProjects(p => p.filter(x => x._id !== project._id));
       toast.success('Project deleted');
       fetchProjects();
     } catch {
       toast.error('Failed to delete project');
+    }
+  };
+
+  const handleRename = async (project, name) => {
+    const trimmedName = name.trim();
+    if (!trimmedName || trimmedName === project.name) {
+      setRenameTarget(null);
+      return true;
+    }
+
+    const previousProjects = projects;
+    setRenameError('');
+    setRenamingId(project._id);
+    setProjects(prev => prev.map(p => p._id === project._id ? { ...p, name: trimmedName } : p));
+
+    try {
+      const res = await api.put(`/projects/${project._id}`, {
+        name: trimmedName,
+        description: project.description || '',
+      });
+      setProjects(prev => prev.map(p => p._id === project._id ? { ...p, ...res.data.project } : p));
+      setRenameTarget(null);
+      return true;
+    } catch {
+      setProjects(previousProjects);
+      setRenameError('Rename failed. Please try again.');
+      return false;
+    } finally {
+      setRenamingId(null);
     }
   };
 
@@ -284,6 +384,10 @@ export default function DashboardPage() {
                     project={project}
                     onOpen={(id) => navigate(`/editor/${id}`)}
                     onDelete={handleDelete}
+                    onEdit={(project) => {
+                      setRenameError('');
+                      setRenameTarget(project);
+                    }}
                   />
                 ))}
               </div>
@@ -300,6 +404,18 @@ export default function DashboardPage() {
             setCreateModal(null);
             navigate(`/editor/${project._id}`);
           }}
+        />
+      )}
+
+      {renameTarget && (
+        <RenameProjectModal
+          project={renameTarget}
+          onClose={() => {
+            if (!renamingId) setRenameTarget(null);
+          }}
+          onSave={handleRename}
+          saving={renamingId === renameTarget._id}
+          error={renameError}
         />
       )}
     </div>

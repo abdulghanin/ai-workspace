@@ -16,7 +16,7 @@ import PresenceAvatars from '../components/editor/PresenceAvatars.jsx';
 import {
   ArrowLeft, Save, MessageSquare, Eye, Code2, Globe, Terminal,
   Check, PanelLeftClose, PanelLeftOpen, Play, GitBranch, Share2,
-  Users, ChevronDown
+  Edit, X
 } from 'lucide-react';
 
 const LANG_MAP = {
@@ -43,6 +43,11 @@ export default function EditorPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(true);
+  const [isRenamingProject, setIsRenamingProject] = useState(false);
+  const [projectNameDraft, setProjectNameDraft] = useState('');
+  const [debouncedProjectName, setDebouncedProjectName] = useState('');
+  const [renamingProject, setRenamingProject] = useState(false);
+  const [renameStatus, setRenameStatus] = useState('idle');
 
   // ── Multi-tab state ──
   const [openTabs, setOpenTabs] = useState([]);    // array of file objects
@@ -100,6 +105,18 @@ export default function EditorPage() {
   useEffect(() => {
     fetchProject();
   }, [projectId]);
+
+  useEffect(() => {
+    if (project?.name && !isRenamingProject) {
+      setProjectNameDraft(project.name);
+      setDebouncedProjectName(project.name);
+    }
+  }, [project?.name, isRenamingProject]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedProjectName(projectNameDraft), 180);
+    return () => clearTimeout(timer);
+  }, [projectNameDraft]);
 
   const fetchProject = async () => {
     try {
@@ -225,6 +242,55 @@ export default function EditorPage() {
     toast.success('Project restored to selected version');
   };
 
+  const startProjectRename = () => {
+    setProjectNameDraft(project?.name || '');
+    setDebouncedProjectName(project?.name || '');
+    setRenameStatus('idle');
+    setIsRenamingProject(true);
+  };
+
+  const cancelProjectRename = () => {
+    setProjectNameDraft(project?.name || '');
+    setDebouncedProjectName(project?.name || '');
+    setRenameStatus('idle');
+    setIsRenamingProject(false);
+  };
+
+  const handleProjectRenameSave = async (e) => {
+    e?.preventDefault();
+    const trimmedName = projectNameDraft.trim();
+    if (!trimmedName) {
+      setRenameStatus('error');
+      return;
+    }
+    if (trimmedName === project?.name) {
+      cancelProjectRename();
+      return;
+    }
+
+    const previousProject = project;
+    setRenamingProject(true);
+    setRenameStatus('saving');
+    setProject(prev => ({ ...prev, name: trimmedName }));
+
+    try {
+      const res = await api.put(`/projects/${projectId}`, {
+        name: trimmedName,
+        description: previousProject?.description || '',
+      });
+      setProject(prev => ({ ...prev, ...res.data.project }));
+      setRenameStatus('saved');
+      setIsRenamingProject(false);
+      setTimeout(() => setRenameStatus('idle'), 1200);
+    } catch {
+      setProject(previousProject);
+      setRenameStatus('error');
+      setIsRenamingProject(true);
+    } finally {
+      setRenamingProject(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center bg-void">
@@ -255,11 +321,68 @@ export default function EditorPage() {
           <ArrowLeft size={15} />
         </button>
 
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 group/title">
           <div className="w-6 h-6 rounded-md bg-panel border border-border flex items-center justify-center flex-shrink-0">
             <typeInfo.icon size={13} className={typeInfo.color} />
           </div>
-          <span className="text-sm font-semibold text-text-primary truncate max-w-[120px]">{project?.name}</span>
+          {isRenamingProject ? (
+            <form onSubmit={handleProjectRenameSave} className="flex items-center gap-1 min-w-0">
+              <input
+                autoFocus
+                className={`h-7 w-44 max-w-[34vw] rounded-md border bg-panel px-2 text-sm font-semibold text-text-primary outline-none transition-colors ${
+                  renameStatus === 'error'
+                    ? 'border-red-400/60 focus:border-red-400'
+                    : 'border-border focus:border-accent/70'
+                }`}
+                value={projectNameDraft}
+                onChange={e => {
+                  setProjectNameDraft(e.target.value);
+                  if (renameStatus === 'error') setRenameStatus('idle');
+                }}
+                onFocus={e => e.target.select()}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') cancelProjectRename();
+                }}
+                maxLength={100}
+              />
+              <button
+                type="submit"
+                disabled={renamingProject || !debouncedProjectName.trim()}
+                className="p-1.5 rounded-md text-text-muted hover:text-accent hover:bg-accent/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                title="Save project name"
+              >
+                {renamingProject ? <div className="w-3.5 h-3.5 rounded-full border border-accent border-t-transparent animate-spin" /> : <Check size={14} />}
+              </button>
+              <button
+                type="button"
+                onClick={cancelProjectRename}
+                disabled={renamingProject}
+                className="p-1.5 rounded-md text-text-muted hover:text-text-secondary hover:bg-panel disabled:opacity-50 transition-all"
+                title="Cancel rename"
+              >
+                <X size={14} />
+              </button>
+            </form>
+          ) : (
+            <div className="flex items-center gap-1 min-w-0">
+              <button
+                onClick={startProjectRename}
+                className="text-sm font-semibold text-text-primary truncate max-w-[160px] hover:text-accent transition-colors text-left"
+                title="Rename project"
+              >
+                {project?.name}
+              </button>
+              <button
+                onClick={startProjectRename}
+                className="opacity-0 group-hover/title:opacity-100 p-1 rounded-md text-text-muted hover:text-accent hover:bg-accent/10 transition-all"
+                title="Rename project"
+              >
+                <Edit size={12} />
+              </button>
+              {renameStatus === 'saved' && <Check size={12} className="text-accent" />}
+              {renameStatus === 'error' && <span className="text-[11px] text-red-400">Not saved</span>}
+            </div>
+          )}
         </div>
 
         {/* Presence avatars */}
